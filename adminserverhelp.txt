@@ -1,0 +1,50 @@
+If you haven't written the backend part yet, here is the code snippet you need to add to your server.js file to make the Admin Page work:
+
+// Example for Node.js / Express / Mongoose
+
+// 1. GET ALL BOOKINGS
+app.get('/admin/bookings', async (req, res) => {
+    try {
+        const bookings = await BookingModel.find(); // specific to your schema name
+        res.json(bookings);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 2. GET ALL FEEDBACKS
+app.get('/admin/feedbacks', async (req, res) => {
+    try {
+        const feedbacks = await FeedbackModel.find();
+        res.json(feedbacks);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 3. GET ALL CONTACTS
+app.get('/admin/contacts', async (req, res) => {
+    try {
+        const contacts = await ContactModel.find();
+        res.json(contacts);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 4. GET ALL USERS
+app.get('/admin/users', async (req, res) => {
+    try {
+        const users = await UserModel.find();
+        res.json(users);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 5. DELETE GENERIC ROUTE
+app.delete('/admin/:collection/:id', async (req, res) => {
+    const { collection, id } = req.params;
+    try {
+        let Model;
+        if(collection === 'users') Model = UserModel;
+        else if(collection === 'bookings') Model = BookingModel;
+        else if(collection === 'feedbacks') Model = FeedbackModel;
+        else if(collection === 'contacts') Model = ContactModel;
+        
+        await Model.findByIdAndDelete(id);
+        res.json({ message: "Deleted successfully" });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
