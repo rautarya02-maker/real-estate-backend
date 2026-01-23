@@ -15,19 +15,27 @@ const app = express();
 
 /* ---------------- MIDDLEWARE ---------------- */
 app.use(express.json());
+
 app.use(
   cors({
-    origin: "*", // later restrict to Netlify URL
-    methods: ["GET", "POST", "PUT", "DELETE"]
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "https://skyline-properties.netlify.app"
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
+
+app.options("*", cors());
 
 /* ---------------- PORT ---------------- */
 const PORT = process.env.PORT || 5000;
 
-/* ---------------- MONGOOSE SETTINGS (IMPORTANT) ---------------- */
+/* ---------------- MONGOOSE SETTINGS ---------------- */
 mongoose.set("strictQuery", true);
-mongoose.set("bufferCommands", false); // ⛔ prevent buffering timeouts
+mongoose.set("bufferCommands", false);
 
 /* ---------------- MONGODB CONNECTION ---------------- */
 async function connectDB() {
@@ -42,13 +50,39 @@ async function connectDB() {
     console.log("✅ MongoDB Connected Successfully");
   } catch (err) {
     console.error("❌ MongoDB Connection Error:", err.message);
-    process.exit(1); // ❌ crash app if DB not connected
+    process.exit(1);
   }
 }
 
 /* ---------------- HEALTH CHECK ---------------- */
 app.get("/", (req, res) => {
-  res.send("Real Estate Backend is running 🚀");
+  res.send("🏡 Skyline Properties Backend is running 🚀");
+});
+
+/* ---------------- CHATBOT (DEMO) ---------------- */
+app.post("/chat", async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message?.trim()) {
+      return res.status(400).json({ reply: "Please type a message." });
+    }
+
+    let reply = "I'm here to help with Skyline Properties 😊";
+
+    if (message.toLowerCase().includes("buy")) {
+      reply = "Looking to buy a property? Browse listings on our website.";
+    } else if (message.toLowerCase().includes("rent")) {
+      reply = "We have great rental properties available!";
+    } else if (message.toLowerCase().includes("contact")) {
+      reply = "You can contact us via the Contact Us page.";
+    }
+
+    res.json({ reply });
+  } catch (err) {
+    console.error("Chat Error:", err);
+    res.status(500).json({ reply: "Chat service is temporarily unavailable." });
+  }
 });
 
 /* ---------------- FEEDBACK ---------------- */
@@ -145,21 +179,10 @@ app.get("/user/profile", async (req, res) => {
 });
 
 /* ---------------- ADMIN ROUTES ---------------- */
-app.get("/admin/users", async (req, res) => {
-  res.json(await User.find({}));
-});
-
-app.get("/admin/bookings", async (req, res) => {
-  res.json(await Visit.find({}));
-});
-
-app.get("/admin/feedbacks", async (req, res) => {
-  res.json(await Feedback.find({}));
-});
-
-app.get("/admin/contacts", async (req, res) => {
-  res.json(await Contact.find({}));
-});
+app.get("/admin/users", async (req, res) => res.json(await User.find({})));
+app.get("/admin/bookings", async (req, res) => res.json(await Visit.find({})));
+app.get("/admin/feedbacks", async (req, res) => res.json(await Feedback.find({})));
+app.get("/admin/contacts", async (req, res) => res.json(await Contact.find({})));
 
 /* ---------------- DELETE ROUTES ---------------- */
 app.delete("/admin/users/:id", async (req, res) => {
@@ -187,32 +210,4 @@ connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
   });
-});
-
-
-/* ---------------- CHATBOT (DEMO) ---------------- */
-app.post("/chat", async (req, res) => {
-  try {
-    const { message } = req.body;
-
-    if (!message) {
-      return res.status(400).json({ reply: "Please type a message." });
-    }
-
-    // Simple demo replies
-    let reply = "I'm here to help with Skyline Properties 😊";
-
-    if (message.toLowerCase().includes("buy")) {
-      reply = "Looking to buy a property? Browse listings on our website.";
-    } else if (message.toLowerCase().includes("rent")) {
-      reply = "We have great rental properties available!";
-    } else if (message.toLowerCase().includes("contact")) {
-      reply = "You can contact us via the Contact Us page.";
-    }
-
-    res.json({ reply });
-  } catch (err) {
-    console.error("Chat Error:", err);
-    res.status(500).json({ reply: "Chat service is temporarily unavailable." });
-  }
 });
