@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
+import OpenAI from "openai";
 
 import User from "./models/User.js";
 import Feedback from "./models/Feedback.js";
@@ -12,6 +13,12 @@ import Visit from "./models/Visit.js";
 dotenv.config();
 
 const app = express();
+
+/* ---------------- OPENROUTER AI SETUP ---------------- */
+const openai = new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1"
+});
 
 /* ---------------- MIDDLEWARE ---------------- */
 app.use(express.json());
@@ -59,29 +66,36 @@ app.get("/", (req, res) => {
   res.send("🏡 Skyline Properties Backend is running 🚀");
 });
 
-/* ---------------- CHATBOT (DEMO) ---------------- */
+/* ---------------- AI CHATBOT (OPENROUTER) ---------------- */
 app.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
 
-    if (!message?.trim()) {
-      return res.status(400).json({ reply: "Please type a message." });
+    if (!message || !message.trim()) {
+      return res.status(400).json({ reply: "Please type a message 😊" });
     }
 
-    let reply = "I'm here to help with Skyline Properties 😊";
+    const completion = await openai.chat.completions.create({
+      model: "openai/gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a helpful and professional AI real estate assistant for Skyline Properties. Keep answers brief, friendly and relevant."
+        },
+        {
+          role: "user",
+          content: message
+        }
+      ]
+    });
 
-    if (message.toLowerCase().includes("buy")) {
-      reply = "Looking to buy a property? Browse listings on our website.";
-    } else if (message.toLowerCase().includes("rent")) {
-      reply = "We have great rental properties available!";
-    } else if (message.toLowerCase().includes("contact")) {
-      reply = "You can contact us via the Contact Us page.";
-    }
-
+    const reply = completion.choices[0].message.content;
     res.json({ reply });
+
   } catch (err) {
-    console.error("Chat Error:", err);
-    res.status(500).json({ reply: "Chat service is temporarily unavailable." });
+    console.error("AI Chat Error:", err.message);
+    res.status(500).json({ reply: "AI service is temporarily unavailable." });
   }
 });
 
@@ -205,7 +219,7 @@ app.delete("/admin/contacts/:id", async (req, res) => {
   res.json({ message: "Deleted" });
 });
 
-/* ---------------- START SERVER ONLY AFTER DB ---------------- */
+/* ---------------- START SERVER ---------------- */
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
