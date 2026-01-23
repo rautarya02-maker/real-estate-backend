@@ -2,64 +2,96 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import bcrypt from "bcryptjs";
+import dotenv from "dotenv";
+
 import User from "./models/User.js";
 import Feedback from "./models/Feedback.js";
 import Contact from "./models/Contact.js";
-import Visit from "./models/Visit.js"; 
+import Visit from "./models/Visit.js";
+
+dotenv.config();
 
 const app = express();
+
+/* ---------------- MIDDLEWARE ---------------- */
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: "*", // later restrict to Netlify URL
+    methods: ["GET", "POST", "PUT", "DELETE"]
+  })
+);
 
-// ----------- MongoDB Atlas Connection -----------
-// SECURITY TIP: In a real project, put this URI in a .env file!
-const uri = "mongodb+srv://rautarya02_db_user:arya%402005@cluster0.ltpfyv3.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+/* ---------------- PORT ---------------- */
+const PORT = process.env.PORT || 5000;
 
-mongoose
-  .connect(uri)
-  .then(() => console.log("MongoDB Connected Successfully"))
-  .catch((err) => console.error("MongoDB Connection Error:", err));
+/* ---------------- MONGOOSE SETTINGS (IMPORTANT) ---------------- */
+mongoose.set("strictQuery", true);
+mongoose.set("bufferCommands", false); // ⛔ prevent buffering timeouts
 
-// ---------------- FEEDBACK SUBMISSION ----------------
+/* ---------------- MONGODB CONNECTION ---------------- */
+async function connectDB() {
+  try {
+    console.log("🔍 MONGO_URI:", process.env.MONGO_URI);
+
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000
+    });
+
+    console.log("✅ MongoDB Connected Successfully");
+  } catch (err) {
+    console.error("❌ MongoDB Connection Error:", err.message);
+    process.exit(1); // ❌ crash app if DB not connected
+  }
+}
+
+/* ---------------- HEALTH CHECK ---------------- */
+app.get("/", (req, res) => {
+  res.send("Real Estate Backend is running 🚀");
+});
+
+/* ---------------- FEEDBACK ---------------- */
 app.post("/submit-feedback", async (req, res) => {
-    try {
-        const newFeedback = new Feedback(req.body);
-        await newFeedback.save();
-        res.status(201).json({ message: "Feedback submitted successfully!" });
-    } catch (err) {
-        console.error("Feedback Error:", err);
-        res.status(500).json({ message: "Failed to save feedback" });
-    }
+  try {
+    const newFeedback = new Feedback(req.body);
+    await newFeedback.save();
+    res.status(201).json({ message: "Feedback submitted successfully!" });
+  } catch (err) {
+    console.error("Feedback Error:", err);
+    res.status(500).json({ message: "Failed to save feedback" });
+  }
 });
 
-// ---------------- CONTACT US ----------------
+/* ---------------- CONTACT US ---------------- */
 app.post("/contact-us", async (req, res) => {
-    try {
-        const newContact = new Contact(req.body);
-        await newContact.save();
-        res.status(201).json({ message: "Message sent successfully!" });
-    } catch (err) {
-        console.error("Contact Error:", err);
-        res.status(500).json({ message: "Failed to send message" });
-    }
+  try {
+    const newContact = new Contact(req.body);
+    await newContact.save();
+    res.status(201).json({ message: "Message sent successfully!" });
+  } catch (err) {
+    console.error("Contact Error:", err);
+    res.status(500).json({ message: "Failed to send message" });
+  }
 });
 
-// ---------------- SIGNUP ----------------
+/* ---------------- SIGNUP ---------------- */
 app.post("/signup", async (req, res) => {
   try {
     const { name, email, password, phone, address } = req.body;
 
     const userExists = await User.findOne({ email });
-    if (userExists) return res.status(400).json({ message: "Email already registered" });
+    if (userExists)
+      return res.status(400).json({ message: "Email already registered" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await User.create({ 
-        name, 
-        email, 
-        password: hashedPassword, 
-        phone, 
-        address 
+    await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      phone,
+      address
     });
 
     res.json({ message: "Account created successfully!" });
@@ -69,15 +101,18 @@ app.post("/signup", async (req, res) => {
   }
 });
 
-// ---------------- LOGIN ----------------
+/* ---------------- LOGIN ---------------- */
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Invalid email or password" });
+    if (!user)
+      return res.status(400).json({ message: "Invalid email or password" });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Invalid email or password" });
+    if (!isMatch)
+      return res.status(400).json({ message: "Invalid email or password" });
 
     res.json({ message: "Login successful", name: user.name });
   } catch (err) {
@@ -86,76 +121,98 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// ---------------- GET USER PROFILE ----------------
-// ONLY ONE version of this route should exist.
+/* ---------------- USER PROFILE ---------------- */
 app.get("/user/profile", async (req, res) => {
-    try {
-        const email = req.query.email;
-        if (!email) return res.status(400).json({ message: "Email query parameter is required" });
+  try {
+    const { email } = req.query;
+    if (!email)
+      return res.status(400).json({ message: "Email is required" });
 
-        const user = await User.findOne({ email });
-        
-        if (user) {
-            // This returns ALL details to your profile page
-            res.json({ 
-                name: user.name,
-                email: user.email,
-                phone: user.phone,
-                address: user.address 
-            });
-        } else {
-            res.status(404).json({ message: "User not found" });
-        }
-    } catch (err) {
-        console.error("Profile Fetch Error:", err);
-        res.status(500).json({ message: "Error fetching profile" });
-    }
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(404).json({ message: "User not found" });
+
+    res.json({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      address: user.address
+    });
+  } catch (err) {
+    console.error("Profile Error:", err);
+    res.status(500).json({ message: "Error fetching profile" });
+  }
 });
 
-// ---------------- ADMIN API ROUTES ----------------
-
-// --- Get All Data ---
+/* ---------------- ADMIN ROUTES ---------------- */
 app.get("/admin/users", async (req, res) => {
-    const users = await User.find({});
-    res.json(users);
+  res.json(await User.find({}));
 });
 
 app.get("/admin/bookings", async (req, res) => {
-    const visits = await Visit.find({}); // Fetches from the Visit model we created
-    res.json(visits);
+  res.json(await Visit.find({}));
 });
 
 app.get("/admin/feedbacks", async (req, res) => {
-    const feedbacks = await Feedback.find({});
-    res.json(feedbacks);
+  res.json(await Feedback.find({}));
 });
 
 app.get("/admin/contacts", async (req, res) => {
-    const contacts = await Contact.find({});
-    res.json(contacts);
+  res.json(await Contact.find({}));
 });
 
-// --- Delete Entry Routes ---
+/* ---------------- DELETE ROUTES ---------------- */
 app.delete("/admin/users/:id", async (req, res) => {
-    await User.findByIdAndDelete(req.params.id);
-    res.json({ message: "Deleted" });
+  await User.findByIdAndDelete(req.params.id);
+  res.json({ message: "Deleted" });
 });
 
 app.delete("/admin/bookings/:id", async (req, res) => {
-    await Visit.findByIdAndDelete(req.params.id);
-    res.json({ message: "Deleted" });
+  await Visit.findByIdAndDelete(req.params.id);
+  res.json({ message: "Deleted" });
 });
 
 app.delete("/admin/feedbacks/:id", async (req, res) => {
-    await Feedback.findByIdAndDelete(req.params.id);
-    res.json({ message: "Deleted" });
+  await Feedback.findByIdAndDelete(req.params.id);
+  res.json({ message: "Deleted" });
 });
 
 app.delete("/admin/contacts/:id", async (req, res) => {
-    await Contact.findByIdAndDelete(req.params.id);
-    res.json({ message: "Deleted" });
+  await Contact.findByIdAndDelete(req.params.id);
+  res.json({ message: "Deleted" });
 });
 
-app.listen(5000, () => {
-  console.log("Server running on http://localhost:5000");
+/* ---------------- START SERVER ONLY AFTER DB ---------------- */
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+});
+
+
+/* ---------------- CHATBOT (DEMO) ---------------- */
+app.post("/chat", async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ reply: "Please type a message." });
+    }
+
+    // Simple demo replies
+    let reply = "I'm here to help with Skyline Properties 😊";
+
+    if (message.toLowerCase().includes("buy")) {
+      reply = "Looking to buy a property? Browse listings on our website.";
+    } else if (message.toLowerCase().includes("rent")) {
+      reply = "We have great rental properties available!";
+    } else if (message.toLowerCase().includes("contact")) {
+      reply = "You can contact us via the Contact Us page.";
+    }
+
+    res.json({ reply });
+  } catch (err) {
+    console.error("Chat Error:", err);
+    res.status(500).json({ reply: "Chat service is temporarily unavailable." });
+  }
 });
