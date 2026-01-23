@@ -8,24 +8,20 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-/* ================= CORS (FINAL & SAFE) ================= */
 app.use(cors({
-  origin: "*",
+  origin: "https://skyline-properties.netlify.app",
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-app.options("*", cors());
-
-/* ================= MIDDLEWARE ================= */
 app.use(express.json());
 
-/* ================= HEALTH ================= */
+app.options("/chat", cors());
+
 app.get("/", (req, res) => {
   res.send("🤖 Skyline Estates Chatbot is running");
 });
 
-/* ================= CHAT ================= */
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
 
@@ -39,37 +35,26 @@ app.post("/chat", async (req, res) => {
       {
         model: "deepseek/deepseek-chat",
         messages: [
-          {
-            role: "system",
-            content:
-              "You are Skyline Estates AI Assistant. Help users with real estate queries, buying, renting, pricing, and property advice."
-          },
+          { role: "system", content: "You are Skyline Estates AI Assistant." },
           { role: "user", content: message }
         ]
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://skyline-properties.netlify.app",
-          "X-Title": "Skyline Estates AI Concierge"
+          "Content-Type": "application/json"
         },
         timeout: 20000
       }
     );
 
-    res.json({
-      reply: response.data.choices[0].message.content
-    });
+    res.json({ reply: response.data.choices[0].message.content });
   } catch (err) {
     console.error("AI Error:", err.response?.data || err.message);
-    res.status(500).json({
-      reply: "🤖 AI service is temporarily unavailable."
-    });
+    res.status(500).json({ reply: "🤖 AI service is temporarily unavailable." });
   }
 });
 
-/* ================= START ================= */
 app.listen(PORT, () => {
   console.log(`🤖 Chatbot running on port ${PORT}`);
 });
