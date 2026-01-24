@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
-import OpenAI from "openai";
+import axios from "axios"; // ✅ use axios instead of openai SDK
 
 import User from "./models/User.js";
 import Feedback from "./models/Feedback.js";
@@ -14,17 +14,6 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-/* ---------------- OPENROUTER AI SETUP ---------------- */
-/* ✅ FIX: add required OpenRouter headers */
-const openai = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1",
-  defaultHeaders: {
-    "HTTP-Referer": "https://skyline-properties.netlify.app",
-    "X-Title": "Skyline Estates AI Concierge"
-  }
-});
 
 /* ---------------- MIDDLEWARE ---------------- */
 app.use(express.json());
@@ -69,35 +58,47 @@ app.get("/", (req, res) => {
   res.send("🏡 Skyline Properties Backend is running 🚀");
 });
 
-/* ---------------- AI CHATBOT (OPENROUTER) ---------------- */
+/* ---------------- AI CHATBOT (OPENROUTER via AXIOS) ---------------- */
 app.post("/chat", async (req, res) => {
+  const { message } = req.body;
+
+  if (!message || !message.trim()) {
+    return res.status(400).json({ reply: "Please type a message 😊" });
+  }
+
   try {
-    const { message } = req.body;
-
-    if (!message || !message.trim()) {
-      return res.status(400).json({ reply: "Please type a message 😊" });
-    }
-
-    const completion = await openai.chat.completions.create({
-      model: "openai/gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a helpful and professional AI real estate assistant for Skyline Properties. Keep answers brief, friendly and relevant."
+    const response = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: "deepseek/deepseek-chat",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a helpful and professional AI real estate assistant for Skyline Properties. Keep answers brief, friendly and relevant."
+          },
+          {
+            role: "user",
+            content: message
+          }
+        ]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://skyline-properties.netlify.app",
+          "X-Title": "Skyline Estates AI Concierge"
         },
-        {
-          role: "user",
-          content: message
-        }
-      ]
+        timeout: 20000
+      }
+    );
+
+    res.json({
+      reply: response.data.choices[0].message.content
     });
-
-    const reply = completion.choices[0].message.content;
-    res.json({ reply });
-
   } catch (err) {
-    console.error("AI Chat Error:", err);
+    console.error("AI Chat Error:", err.response?.data || err.message);
     res.status(500).json({
       reply: "AI service is temporarily unavailable."
     });
@@ -134,8 +135,9 @@ app.post("/signup", async (req, res) => {
     const { name, email, password, phone, address } = req.body;
 
     const userExists = await User.findOne({ email });
-    if (userExists)
+    if (userExists) {
       return res.status(400).json({ message: "Email already registered" });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -160,12 +162,14 @@ app.post("/login", async (req, res) => {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user)
+    if (!user) {
       return res.status(400).json({ message: "Invalid email or password" });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
+    if (!isMatch) {
       return res.status(400).json({ message: "Invalid email or password" });
+    }
 
     res.json({ message: "Login successful", name: user.name });
   } catch (err) {
@@ -178,12 +182,14 @@ app.post("/login", async (req, res) => {
 app.get("/user/profile", async (req, res) => {
   try {
     const { email } = req.query;
-    if (!email)
+    if (!email) {
       return res.status(400).json({ message: "Email is required" });
+    }
 
     const user = await User.findOne({ email });
-    if (!user)
+    if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
 
     res.json({
       name: user.name,
