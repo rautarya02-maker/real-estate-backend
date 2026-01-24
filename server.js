@@ -13,11 +13,17 @@ import Visit from "./models/Visit.js";
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
 /* ---------------- OPENROUTER AI SETUP ---------------- */
+/* ✅ FIX: add required OpenRouter headers */
 const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1"
+  baseURL: "https://openrouter.ai/api/v1",
+  defaultHeaders: {
+    "HTTP-Referer": "https://skyline-properties.netlify.app",
+    "X-Title": "Skyline Estates AI Concierge"
+  }
 });
 
 /* ---------------- MIDDLEWARE ---------------- */
@@ -36,9 +42,6 @@ app.use(
 );
 
 app.options("*", cors());
-
-/* ---------------- PORT ---------------- */
-const PORT = process.env.PORT || 5000;
 
 /* ---------------- MONGOOSE SETTINGS ---------------- */
 mongoose.set("strictQuery", true);
@@ -94,8 +97,10 @@ app.post("/chat", async (req, res) => {
     res.json({ reply });
 
   } catch (err) {
-    console.error("AI Chat Error:", err.message);
-    res.status(500).json({ reply: "AI service is temporarily unavailable." });
+    console.error("AI Chat Error:", err);
+    res.status(500).json({
+      reply: "AI service is temporarily unavailable."
+    });
   }
 });
 
@@ -193,10 +198,10 @@ app.get("/user/profile", async (req, res) => {
 });
 
 /* ---------------- ADMIN ROUTES ---------------- */
-app.get("/admin/users", async (req, res) => res.json(await User.find({})));
-app.get("/admin/bookings", async (req, res) => res.json(await Visit.find({})));
-app.get("/admin/feedbacks", async (req, res) => res.json(await Feedback.find({})));
-app.get("/admin/contacts", async (req, res) => res.json(await Contact.find({})));
+app.get("/admin/users", async (_, res) => res.json(await User.find({})));
+app.get("/admin/bookings", async (_, res) => res.json(await Visit.find({})));
+app.get("/admin/feedbacks", async (_, res) => res.json(await Feedback.find({})));
+app.get("/admin/contacts", async (_, res) => res.json(await Contact.find({})));
 
 /* ---------------- DELETE ROUTES ---------------- */
 app.delete("/admin/users/:id", async (req, res) => {
