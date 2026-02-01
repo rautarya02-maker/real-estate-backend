@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
-import axios from "axios"; // ✅ using axios (unchanged)
+import axios from "axios";
 
 import User from "./models/User.js";
 import Feedback from "./models/Feedback.js";
@@ -15,39 +15,51 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-/* ---------------- MIDDLEWARE (CORRECTED CORS) ---------------- */
+/* ================== MIDDLEWARE (ROBUST CORS) ================== */
+
 app.use(express.json());
+
+// ⭐ IMPORTANT — ADD YOUR ACTUAL NETLIFY URL HERE
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "https://skyline-properties.netlify.app"
+];
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:3000",
-      "https://skyline-properties.netlify.app"
-    ],
+    origin: function (origin, callback) {
+      // Allow no-origin requests (like Postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn("Blocked by CORS:", origin);
+        callback(null, false);
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
 
-// IMPORTANT: fixes preflight issue on Render
+// 🔥 Fix Render preflight issue
 app.options("*", cors());
 
-/* ---------------- MONGOOSE SETTINGS ---------------- */
+/* ================== MONGODB ================== */
+
 mongoose.set("strictQuery", true);
 mongoose.set("bufferCommands", false);
 
-/* ---------------- MONGODB CONNECTION ---------------- */
 async function connectDB() {
   try {
-    console.log("🔍 MONGO_URI:", process.env.MONGO_URI);
-
+    console.log("🔍 Connecting to MongoDB...");
     await mongoose.connect(process.env.MONGO_URI, {
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000
     });
-
     console.log("✅ MongoDB Connected Successfully");
   } catch (err) {
     console.error("❌ MongoDB Connection Error:", err.message);
@@ -55,12 +67,23 @@ async function connectDB() {
   }
 }
 
-/* ---------------- HEALTH CHECK ---------------- */
+/* ================== HEALTH CHECK ================== */
+
 app.get("/", (req, res) => {
   res.send("🏡 Skyline Properties Backend is running 🚀");
 });
 
-/* ---------------- AI CHATBOT (UNCHANGED LOGIC) ---------------- */
+/* ============ CHATBOT ROUTES (IMPORTANT FIX) ============ */
+
+// 👉 Browser-friendly test route (NEW)
+app.get("/chat", (req, res) => {
+  res.json({
+    status: "ok",
+    message: "Chat endpoint is live. Use POST /chat to send messages."
+  });
+});
+
+// 👉 Actual chatbot logic (your same logic)
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
 
@@ -108,7 +131,8 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-/* ---------------- FEEDBACK ---------------- */
+/* ================== FEEDBACK ================== */
+
 app.post("/submit-feedback", async (req, res) => {
   try {
     const newFeedback = new Feedback(req.body);
@@ -120,7 +144,8 @@ app.post("/submit-feedback", async (req, res) => {
   }
 });
 
-/* ---------------- CONTACT US ---------------- */
+/* ================== CONTACT ================== */
+
 app.post("/contact-us", async (req, res) => {
   try {
     const newContact = new Contact(req.body);
@@ -132,7 +157,8 @@ app.post("/contact-us", async (req, res) => {
   }
 });
 
-/* ---------------- SIGNUP ---------------- */
+/* ================== SIGNUP ================== */
+
 app.post("/signup", async (req, res) => {
   try {
     const { name, email, password, phone, address } = req.body;
@@ -159,7 +185,8 @@ app.post("/signup", async (req, res) => {
   }
 });
 
-/* ---------------- LOGIN ---------------- */
+/* ================== LOGIN ================== */
+
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -181,7 +208,8 @@ app.post("/login", async (req, res) => {
   }
 });
 
-/* ---------------- USER PROFILE ---------------- */
+/* ================== USER PROFILE ================== */
+
 app.get("/user/profile", async (req, res) => {
   try {
     const { email } = req.query;
@@ -206,13 +234,15 @@ app.get("/user/profile", async (req, res) => {
   }
 });
 
-/* ---------------- ADMIN ROUTES ---------------- */
+/* ================== ADMIN ROUTES ================== */
+
 app.get("/admin/users", async (_, res) => res.json(await User.find({})));
 app.get("/admin/bookings", async (_, res) => res.json(await Visit.find({})));
 app.get("/admin/feedbacks", async (_, res) => res.json(await Feedback.find({})));
 app.get("/admin/contacts", async (_, res) => res.json(await Contact.find({})));
 
-/* ---------------- DELETE ROUTES ---------------- */
+/* ================== DELETE ROUTES ================== */
+
 app.delete("/admin/users/:id", async (req, res) => {
   await User.findByIdAndDelete(req.params.id);
   res.json({ message: "Deleted" });
@@ -233,7 +263,8 @@ app.delete("/admin/contacts/:id", async (req, res) => {
   res.json({ message: "Deleted" });
 });
 
-/* ---------------- START SERVER ---------------- */
+/* ================== START SERVER ================== */
+
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
