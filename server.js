@@ -157,6 +157,51 @@ app.post("/contact-us", async (req, res) => {
   }
 });
 
+/* ================== VISIT BOOKING ================== */
+
+app.post("/submit-visit", async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      phone,
+      date,
+      timeSlot,
+      contactMethods,
+      message,
+      propertyId
+    } = req.body;
+
+    if (!name || !email || !phone || !date || !timeSlot) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const newVisit = new Visit({
+      name,
+      email,
+      phone,
+      date,
+      timeSlot,
+      contactMethods,
+      message,
+      propertyId
+    });
+
+    await newVisit.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Visit booked successfully!"
+    });
+  } catch (err) {
+    console.error("Visit Booking Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to book visit"
+    });
+  }
+});
+
 /* ================== SIGNUP ================== */
 
 app.post("/signup", async (req, res) => {
