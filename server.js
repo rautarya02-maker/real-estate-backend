@@ -15,10 +15,11 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-/* ================== MIDDLEWARE ================== */
+/* ================== MIDDLEWARE (ROBUST CORS) ================== */
 
 app.use(express.json());
 
+// ⭐ IMPORTANT — ADD YOUR ACTUAL NETLIFY URL HERE
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
@@ -29,7 +30,9 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Allow no-origin requests (like Postman)
       if (!origin) return callback(null, true);
+
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -43,6 +46,7 @@ app.use(
   })
 );
 
+// 🔥 Fix Render preflight issue
 app.options("*", cors());
 
 /* ================== MONGODB ================== */
@@ -70,15 +74,17 @@ app.get("/", (req, res) => {
   res.send("🏡 Skyline Properties Backend is running 🚀");
 });
 
-/* ================== CHATBOT ================== */
+/* ============ CHATBOT ROUTES (IMPORTANT FIX) ============ */
 
+// 👉 Browser-friendly test route (NEW)
 app.get("/chat", (req, res) => {
   res.json({
     status: "ok",
-    message: "Chat endpoint is live. Use POST /chat."
+    message: "Chat endpoint is live. Use POST /chat to send messages."
   });
 });
 
+// 👉 Actual chatbot logic (your same logic)
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
 
@@ -95,9 +101,12 @@ app.post("/chat", async (req, res) => {
           {
             role: "system",
             content:
-              "You are a helpful and professional AI real estate assistant for Skyline Properties."
+              "You are a helpful and professional AI real estate assistant for Skyline Properties. Keep answers brief, friendly and relevant."
           },
-          { role: "user", content: message }
+          {
+            role: "user",
+            content: message
+          }
         ]
       },
       {
@@ -105,6 +114,7 @@ app.post("/chat", async (req, res) => {
           Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
           "HTTP-Referer": "https://skyline-properties.netlify.app",
+          
           "X-Title": "Skyline Estates AI Concierge"
         },
         timeout: 20000
@@ -116,8 +126,10 @@ app.post("/chat", async (req, res) => {
       success: true
     });
   } catch (err) {
-    console.error("AI Chat Error:", err.message);
-    res.status(500).json({ reply: "AI service unavailable" });
+    console.error("AI Chat Error:", err.response?.data || err.message);
+    res.status(500).json({
+      reply: "AI service is temporarily unavailable."
+    });
   }
 });
 
@@ -125,9 +137,11 @@ app.post("/chat", async (req, res) => {
 
 app.post("/submit-feedback", async (req, res) => {
   try {
-    await new Feedback(req.body).save();
+    const newFeedback = new Feedback(req.body);
+    await newFeedback.save();
     res.status(201).json({ message: "Feedback submitted successfully!" });
-  } catch {
+  } catch (err) {
+    console.error("Feedback Error:", err);
     res.status(500).json({ message: "Failed to save feedback" });
   }
 });
@@ -136,14 +150,16 @@ app.post("/submit-feedback", async (req, res) => {
 
 app.post("/contact-us", async (req, res) => {
   try {
-    await new Contact(req.body).save();
+    const newContact = new Contact(req.body);
+    await newContact.save();
     res.status(201).json({ message: "Message sent successfully!" });
-  } catch {
+  } catch (err) {
+    console.error("Contact Error:", err);
     res.status(500).json({ message: "Failed to send message" });
   }
 });
 
-/* ================== VISIT BOOKING (FIXED) ================== */
+/* ================== VISIT BOOKING ================== */
 
 app.post("/submit-visit", async (req, res) => {
   try {
@@ -151,30 +167,29 @@ app.post("/submit-visit", async (req, res) => {
       name,
       email,
       phone,
-      visitDate,      // ✅ frontend field
+      date,
       timeSlot,
       contactMethods,
       message,
       propertyId
     } = req.body;
 
-    // Debug (safe to keep during testing)
-    console.log("VISIT PAYLOAD:", req.body);
-
-    if (!name || !email || !phone || !visitDate || !timeSlot) {
+    if (!name || !email || !phone || !date || !timeSlot) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    await new Visit({
+    const newVisit = new Visit({
       name,
       email,
       phone,
-      date: visitDate, // ✅ mapped correctly to DB
+      date,
       timeSlot,
       contactMethods,
       message,
       propertyId
-    }).save();
+    });
+
+    await newVisit.save();
 
     res.status(201).json({
       success: true,
@@ -182,17 +197,21 @@ app.post("/submit-visit", async (req, res) => {
     });
   } catch (err) {
     console.error("Visit Booking Error:", err);
-    res.status(500).json({ message: "Failed to book visit" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to book visit"
+    });
   }
 });
 
-/* ================== AUTH ================== */
+/* ================== SIGNUP ================== */
 
 app.post("/signup", async (req, res) => {
   try {
     const { name, email, password, phone, address } = req.body;
 
-    if (await User.findOne({ email })) {
+    const userExists = await User.findOne({ email });
+    if (userExists) {
       return res.status(400).json({ message: "Email already registered" });
     }
 
@@ -207,32 +226,69 @@ app.post("/signup", async (req, res) => {
     });
 
     res.json({ message: "Account created successfully!" });
-  } catch {
+  } catch (err) {
+    console.error("Signup Error:", err);
     res.status(500).json({ message: "Signup failed" });
   }
 });
+
+/* ================== LOGIN ================== */
 
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    if (!user) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
     res.json({ message: "Login successful", name: user.name });
-  } catch {
+  } catch (err) {
+    console.error("Login Error:", err);
     res.status(500).json({ message: "Login failed" });
   }
 });
 
-/* ================== ADMIN ================== */
+/* ================== USER PROFILE ================== */
 
-app.get("/admin/users", async (_, res) => res.json(await User.find()));
-app.get("/admin/bookings", async (_, res) => res.json(await Visit.find()));
-app.get("/admin/feedbacks", async (_, res) => res.json(await Feedback.find()));
-app.get("/admin/contacts", async (_, res) => res.json(await Contact.find()));
+app.get("/user/profile", async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      address: user.address
+    });
+  } catch (err) {
+    console.error("Profile Error:", err);
+    res.status(500).json({ message: "Error fetching profile" });
+  }
+});
+
+/* ================== ADMIN ROUTES ================== */
+
+app.get("/admin/users", async (_, res) => res.json(await User.find({})));
+app.get("/admin/bookings", async (_, res) => res.json(await Visit.find({})));
+app.get("/admin/feedbacks", async (_, res) => res.json(await Feedback.find({})));
+app.get("/admin/contacts", async (_, res) => res.json(await Contact.find({})));
+
+/* ================== DELETE ROUTES ================== */
 
 app.delete("/admin/users/:id", async (req, res) => {
   await User.findByIdAndDelete(req.params.id);
@@ -241,6 +297,16 @@ app.delete("/admin/users/:id", async (req, res) => {
 
 app.delete("/admin/bookings/:id", async (req, res) => {
   await Visit.findByIdAndDelete(req.params.id);
+  res.json({ message: "Deleted" });
+});
+
+app.delete("/admin/feedbacks/:id", async (req, res) => {
+  await Feedback.findByIdAndDelete(req.params.id);
+  res.json({ message: "Deleted" });
+});
+
+app.delete("/admin/contacts/:id", async (req, res) => {
+  await Contact.findByIdAndDelete(req.params.id);
   res.json({ message: "Deleted" });
 });
 
