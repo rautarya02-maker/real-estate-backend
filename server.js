@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
-import axios from "axios"; // ✅ use axios instead of openai SDK
+import axios from "axios"; // ✅ using axios (unchanged)
 
 import User from "./models/User.js";
 import Feedback from "./models/Feedback.js";
@@ -15,7 +15,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-/* ---------------- MIDDLEWARE ---------------- */
+/* ---------------- MIDDLEWARE (CORRECTED CORS) ---------------- */
 app.use(express.json());
 
 app.use(
@@ -25,11 +25,13 @@ app.use(
       "http://localhost:3000",
       "https://skyline-properties.netlify.app"
     ],
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
 
+// IMPORTANT: fixes preflight issue on Render
 app.options("*", cors());
 
 /* ---------------- MONGOOSE SETTINGS ---------------- */
@@ -58,7 +60,7 @@ app.get("/", (req, res) => {
   res.send("🏡 Skyline Properties Backend is running 🚀");
 });
 
-/* ---------------- AI CHATBOT (OPENROUTER via AXIOS) ---------------- */
+/* ---------------- AI CHATBOT (UNCHANGED LOGIC) ---------------- */
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
 
@@ -95,7 +97,8 @@ app.post("/chat", async (req, res) => {
     );
 
     res.json({
-      reply: response.data.choices[0].message.content
+      reply: response.data.choices[0].message.content,
+      success: true
     });
   } catch (err) {
     console.error("AI Chat Error:", err.response?.data || err.message);
