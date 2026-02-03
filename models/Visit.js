@@ -1,14 +1,41 @@
 import mongoose from "mongoose";
 
-const visitSchema = new mongoose.Schema({
-    fullName: { type: String, required: true },
-    email: { type: String, required: true },
-    phone: { type: String, required: true },
-    visitDate: { type: String, required: true },
-    visitTime: { type: String, required: true },
-    contactMethods: { type: [String], required: true },
-    message: { type: String },
-    createdAt: { type: Date, default: Date.now }
-});
+const VisitSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true
+    },
+    email: {
+      type: String,
+      required: true
+    },
+    phone: {
+      type: String,
+      required: true
+    },
+    date: {
+      type: String,
+      required: true
+    },
+    timeSlot: {
+      type: String,
+      required: true
+    },
+    contactMethods: {
+      type: [String],
+      default: []
+    },
+    message: {
+      type: String,
+      default: ""
+    },
+    propertyId: {
+      type: String,
+      default: null
+    }
+  },
+  { timestamps: true }
+);
 
-export default mongoose.model("Visit", visitSchema);
+export default mongoose.model("Visit", VisitSchema);
