@@ -143,20 +143,23 @@ app.post("/contact-us", async (req, res) => {
 
 app.post("/submit-visit", async (req, res) => {
   try {
-    console.log("📥 VISIT BODY:", req.body); // 🔥 DEBUG (keep)
+    console.log("📥 VISIT BODY:", req.body);
 
     const {
       name,
       email,
       phone,
       date,
+      visitDate, // 👈 accept old frontend
       timeSlot,
       contactMethods = [],
       message = "",
       propertyId = null
     } = req.body;
 
-    if (!name || !email || !phone || !date || !timeSlot) {
+    const finalDate = date || visitDate; // ✅ fallback
+
+    if (!name || !email || !phone || !finalDate || !timeSlot) {
       return res.status(400).json({
         success: false,
         message: "Missing required fields"
@@ -167,7 +170,7 @@ app.post("/submit-visit", async (req, res) => {
       name,
       email,
       phone,
-      date,
+      date: finalDate, // ✅ always saved correctly
       timeSlot,
       contactMethods,
       message,
@@ -188,6 +191,7 @@ app.post("/submit-visit", async (req, res) => {
     });
   }
 });
+
 
 /* ================== AUTH ================== */
 
