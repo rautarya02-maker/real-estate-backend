@@ -10,8 +10,8 @@ import crypto from "crypto";
 import User from "./models/User.js";
 import Feedback from "./models/Feedback.js";
 import Contact from "./models/Contact.js";
-import Visit from "./models/Visit.js";
-import PaidUser from "./models/PaidUser.js";
+import Visit from "./models/Visit.js";        // optional, unchanged
+import PaidUser from "./models/PaidUser.js";  // ✅ separate collection
 
 dotenv.config();
 
@@ -95,7 +95,7 @@ app.post("/create-order", async (req, res) => {
   }
 });
 
-// Verify Payment & Mark Visit as PAID
+// Verify Payment & Save Paid User
 app.post("/verify-payment", async (req, res) => {
   try {
     const {
@@ -115,18 +115,18 @@ app.post("/verify-payment", async (req, res) => {
       return res.status(400).json({ success: false });
     }
 
-    // ✅ SAVE INTO SEPARATE COLLECTION
+    // ✅ SAVE TO SEPARATE COLLECTION
     await new PaidUser({
       amount: 1,
+      paymentStatus: "PAID",
       paymentId: razorpay_payment_id,
       orderId: razorpay_order_id,
       paymentMethod: "Google Pay"
     }).save();
 
     res.json({ success: true });
-
   } catch (err) {
-    console.error("PaidUser save error:", err);
+    console.error("❌ PaidUser Save Error:", err);
     res.status(500).json({ success: false });
   }
 });
@@ -174,7 +174,7 @@ app.post("/chat", async (req, res) => {
       reply: response.data.choices[0].message.content
     });
   } catch (err) {
-    console.error("❌ AI Chat Error:", err.response?.data || err.message);
+    console.error("❌ AI Chat Error:", err.message);
     res.status(500).json({ reply: "AI service unavailable" });
   }
 });
@@ -185,7 +185,7 @@ app.post("/submit-feedback", async (req, res) => {
   try {
     await new Feedback(req.body).save();
     res.status(201).json({ message: "Feedback submitted successfully!" });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Failed to save feedback" });
   }
 });
@@ -196,12 +196,12 @@ app.post("/contact-us", async (req, res) => {
   try {
     await new Contact(req.body).save();
     res.status(201).json({ message: "Message sent successfully!" });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Failed to send message" });
   }
 });
 
-/* ================== VISIT BOOKING (UNCHANGED) ================== */
+/* ================== VISIT BOOKING (OPTIONAL, UNCHANGED) ================== */
 
 app.post("/submit-visit", async (req, res) => {
   try {
@@ -236,7 +236,7 @@ app.post("/submit-visit", async (req, res) => {
     }).save();
 
     res.status(201).json({ success: true, visitId: visit._id });
-  } catch (err) {
+  } catch {
     res.status(500).json({ success: false });
   }
 });
@@ -285,6 +285,7 @@ app.post("/login", async (req, res) => {
 /* ================== ADMIN ================== */
 
 app.get("/admin/users", async (_, res) => res.json(await User.find()));
+app.get("/admin/paid-users", async (_, res) => res.json(await PaidUser.find()));
 app.get("/admin/bookings", async (_, res) => res.json(await Visit.find()));
 app.get("/admin/feedbacks", async (_, res) => res.json(await Feedback.find()));
 app.get("/admin/contacts", async (_, res) => res.json(await Contact.find()));
