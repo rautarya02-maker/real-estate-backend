@@ -11,6 +11,7 @@ import User from "./models/User.js";
 import Feedback from "./models/Feedback.js";
 import Contact from "./models/Contact.js";
 import Visit from "./models/Visit.js";
+import PaidUser from "./models/PaidUser.js";
 
 dotenv.config();
 
@@ -100,9 +101,7 @@ app.post("/verify-payment", async (req, res) => {
     const {
       razorpay_order_id,
       razorpay_payment_id,
-      razorpay_signature,
-      visitId,        // optional (recommended)
-      visitData       // optional (fallback)
+      razorpay_signature
     } = req.body;
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
@@ -116,14 +115,22 @@ app.post("/verify-payment", async (req, res) => {
       return res.status(400).json({ success: false });
     }
 
-    // ✅ If visit already exists → update it
-    if (visitId) {
-      await Visit.findByIdAndUpdate(visitId, {
-        paymentStatus: "PAID",
-        paymentId: razorpay_payment_id,
-        orderId: razorpay_order_id
-      });
-    }
+    // ✅ SAVE INTO SEPARATE COLLECTION
+    await new PaidUser({
+      amount: 1,
+      paymentId: razorpay_payment_id,
+      orderId: razorpay_order_id,
+      paymentMethod: "Google Pay"
+    }).save();
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("PaidUser save error:", err);
+    res.status(500).json({ success: false });
+  }
+});
+
 
     // ✅ If visit does NOT exist → create new PAID visit
     else if (visitData) {
