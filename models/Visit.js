@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const VisitSchema = new mongoose.Schema(
   {
+    // ===== User / Visit Details =====
     name: {
       type: String,
       required: true
@@ -33,9 +34,26 @@ const VisitSchema = new mongoose.Schema(
     propertyId: {
       type: String,
       default: null
+    },
+
+    // ===== Payment Details =====
+    paymentStatus: {
+      type: String,
+      enum: ["PENDING", "PAID"],
+      default: "PENDING"
+    },
+    paymentId: {
+      type: String,
+      default: null
+    },
+    orderId: {
+      type: String,
+      default: null
     }
   },
-  { timestamps: true }
+  {
+    timestamps: true
+  }
 );
 
 export default mongoose.model("Visit", VisitSchema);
