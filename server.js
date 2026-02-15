@@ -4,6 +4,8 @@ import cors from "cors";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
 import axios from "axios";
+import Razorpay from "razorpay";
+import crypto from "crypto";
 
 import User from "./models/User.js";
 import Feedback from "./models/Feedback.js";
@@ -14,6 +16,13 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+/* ================== RAZORPAY ================== */
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+});
 
 /* ================== MIDDLEWARE ================== */
 
@@ -65,6 +74,46 @@ async function connectDB() {
 
 app.get("/", (_, res) => {
   res.send("🏡 Skyline Properties Backend is running 🚀");
+});
+
+/* ================== RAZORPAY PAYMENT ================== */
+
+// Create Order (₹1)
+app.post("/create-order", async (req, res) => {
+  try {
+    const order = await razorpay.orders.create({
+      amount: 1 * 100, // ₹1 in paise
+      currency: "INR",
+      receipt: "receipt_" + Date.now()
+    });
+
+    res.json({ success: true, order });
+  } catch (err) {
+    console.error("❌ Razorpay Order Error:", err);
+    res.status(500).json({ success: false });
+  }
+});
+
+// Verify Payment
+app.post("/verify-payment", (req, res) => {
+  const {
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature
+  } = req.body;
+
+  const body = razorpay_order_id + "|" + razorpay_payment_id;
+
+  const expectedSignature = crypto
+    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+    .update(body)
+    .digest("hex");
+
+  if (expectedSignature === razorpay_signature) {
+    res.json({ success: true });
+  } else {
+    res.status(400).json({ success: false });
+  }
 });
 
 /* ================== CHATBOT ================== */
@@ -139,59 +188,45 @@ app.post("/contact-us", async (req, res) => {
   }
 });
 
-/* ================== VISIT BOOKING (FIXED) ================== */
+/* ================== VISIT BOOKING ================== */
 
 app.post("/submit-visit", async (req, res) => {
   try {
-    console.log("📥 VISIT BODY:", req.body);
-
     const {
       name,
       email,
       phone,
       date,
-      visitDate, // 👈 accept old frontend
+      visitDate,
       timeSlot,
       contactMethods = [],
       message = "",
       propertyId = null
     } = req.body;
 
-    const finalDate = date || visitDate; // ✅ fallback
+    const finalDate = date || visitDate;
 
     if (!name || !email || !phone || !finalDate || !timeSlot) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required fields"
-      });
+      return res.status(400).json({ success: false });
     }
 
-    const newVisit = new Visit({
+    await new Visit({
       name,
       email,
       phone,
-      date: finalDate, // ✅ always saved correctly
+      date: finalDate,
       timeSlot,
       contactMethods,
       message,
       propertyId
-    });
+    }).save();
 
-    await newVisit.save();
-
-    res.status(201).json({
-      success: true,
-      message: "Visit booked successfully!"
-    });
+    res.status(201).json({ success: true });
   } catch (err) {
-    console.error("❌ Visit Booking Error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Failed to book visit"
-    });
+    console.error("Visit Error:", err);
+    res.status(500).json({ success: false });
   }
 });
-
 
 /* ================== AUTH ================== */
 
@@ -215,7 +250,6 @@ app.post("/signup", async (req, res) => {
 
     res.json({ message: "Account created successfully!" });
   } catch (err) {
-    console.error("Signup Error:", err);
     res.status(500).json({ message: "Signup failed" });
   }
 });
@@ -230,31 +264,8 @@ app.post("/login", async (req, res) => {
     }
 
     res.json({ message: "Login successful", name: user.name });
-  } catch (err) {
-    console.error("Login Error:", err);
+  } catch {
     res.status(500).json({ message: "Login failed" });
-  }
-});
-
-/* ================== PROFILE ================== */
-
-app.get("/user/profile", async (req, res) => {
-  try {
-    const { email } = req.query;
-    if (!email) return res.status(400).json({ message: "Email required" });
-
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    res.json({
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      address: user.address
-    });
-  } catch (err) {
-    console.error("Profile Error:", err);
-    res.status(500).json({ message: "Error fetching profile" });
   }
 });
 
@@ -267,21 +278,6 @@ app.get("/admin/contacts", async (_, res) => res.json(await Contact.find()));
 
 app.delete("/admin/users/:id", async (req, res) => {
   await User.findByIdAndDelete(req.params.id);
-  res.json({ message: "Deleted" });
-});
-
-app.delete("/admin/bookings/:id", async (req, res) => {
-  await Visit.findByIdAndDelete(req.params.id);
-  res.json({ message: "Deleted" });
-});
-
-app.delete("/admin/feedbacks/:id", async (req, res) => {
-  await Feedback.findByIdAndDelete(req.params.id);
-  res.json({ message: "Deleted" });
-});
-
-app.delete("/admin/contacts/:id", async (req, res) => {
-  await Contact.findByIdAndDelete(req.params.id);
   res.json({ message: "Deleted" });
 });
 
