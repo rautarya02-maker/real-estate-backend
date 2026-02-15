@@ -82,7 +82,7 @@ app.get("/", (_, res) => {
 app.post("/create-order", async (req, res) => {
   try {
     const order = await razorpay.orders.create({
-      amount: 1 * 100, // ₹1 in paise
+      amount: 1 * 100,
       currency: "INR",
       receipt: "receipt_" + Date.now()
     });
@@ -94,25 +94,51 @@ app.post("/create-order", async (req, res) => {
   }
 });
 
-// Verify Payment
-app.post("/verify-payment", (req, res) => {
-  const {
-    razorpay_order_id,
-    razorpay_payment_id,
-    razorpay_signature
-  } = req.body;
+// Verify Payment & Mark Visit as PAID
+app.post("/verify-payment", async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      visitId,        // optional (recommended)
+      visitData       // optional (fallback)
+    } = req.body;
 
-  const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
 
-  const expectedSignature = crypto
-    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-    .update(body)
-    .digest("hex");
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(body)
+      .digest("hex");
 
-  if (expectedSignature === razorpay_signature) {
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ success: false });
+    }
+
+    // ✅ If visit already exists → update it
+    if (visitId) {
+      await Visit.findByIdAndUpdate(visitId, {
+        paymentStatus: "PAID",
+        paymentId: razorpay_payment_id,
+        orderId: razorpay_order_id
+      });
+    }
+
+    // ✅ If visit does NOT exist → create new PAID visit
+    else if (visitData) {
+      await new Visit({
+        ...visitData,
+        paymentStatus: "PAID",
+        paymentId: razorpay_payment_id,
+        orderId: razorpay_order_id
+      }).save();
+    }
+
     res.json({ success: true });
-  } else {
-    res.status(400).json({ success: false });
+  } catch (err) {
+    console.error("❌ Payment Verification Error:", err);
+    res.status(500).json({ success: false });
   }
 });
 
@@ -171,7 +197,6 @@ app.post("/submit-feedback", async (req, res) => {
     await new Feedback(req.body).save();
     res.status(201).json({ message: "Feedback submitted successfully!" });
   } catch (err) {
-    console.error("Feedback Error:", err);
     res.status(500).json({ message: "Failed to save feedback" });
   }
 });
@@ -183,12 +208,11 @@ app.post("/contact-us", async (req, res) => {
     await new Contact(req.body).save();
     res.status(201).json({ message: "Message sent successfully!" });
   } catch (err) {
-    console.error("Contact Error:", err);
     res.status(500).json({ message: "Failed to send message" });
   }
 });
 
-/* ================== VISIT BOOKING ================== */
+/* ================== VISIT BOOKING (UNCHANGED) ================== */
 
 app.post("/submit-visit", async (req, res) => {
   try {
@@ -210,7 +234,7 @@ app.post("/submit-visit", async (req, res) => {
       return res.status(400).json({ success: false });
     }
 
-    await new Visit({
+    const visit = await new Visit({
       name,
       email,
       phone,
@@ -218,12 +242,12 @@ app.post("/submit-visit", async (req, res) => {
       timeSlot,
       contactMethods,
       message,
-      propertyId
+      propertyId,
+      paymentStatus: "PENDING"
     }).save();
 
-    res.status(201).json({ success: true });
+    res.status(201).json({ success: true, visitId: visit._id });
   } catch (err) {
-    console.error("Visit Error:", err);
     res.status(500).json({ success: false });
   }
 });
@@ -249,7 +273,7 @@ app.post("/signup", async (req, res) => {
     });
 
     res.json({ message: "Account created successfully!" });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Signup failed" });
   }
 });
