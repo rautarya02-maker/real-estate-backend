@@ -131,24 +131,6 @@ app.post("/verify-payment", async (req, res) => {
   }
 });
 
-
-    // ✅ If visit does NOT exist → create new PAID visit
-    else if (visitData) {
-      await new Visit({
-        ...visitData,
-        paymentStatus: "PAID",
-        paymentId: razorpay_payment_id,
-        orderId: razorpay_order_id
-      }).save();
-    }
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Payment Verification Error:", err);
-    res.status(500).json({ success: false });
-  }
-});
-
 /* ================== CHATBOT ================== */
 
 app.get("/chat", (_, res) => {
