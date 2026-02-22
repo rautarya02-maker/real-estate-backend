@@ -101,7 +101,8 @@ app.post("/verify-payment", async (req, res) => {
     const {
       razorpay_order_id,
       razorpay_payment_id,
-      razorpay_signature
+      razorpay_signature,
+      email   // ✅ ADD THIS
     } = req.body;
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
@@ -116,13 +117,14 @@ app.post("/verify-payment", async (req, res) => {
     }
 
     // ✅ SAVE TO SEPARATE COLLECTION
-    await new PaidUser({
-      amount: 1,
-      paymentStatus: "PAID",
-      paymentId: razorpay_payment_id,
-      orderId: razorpay_order_id,
-      paymentMethod: "Google Pay"
-    }).save();
+await new PaidUser({
+  email,                    // ✅ ADD THIS
+  amount: 1,
+  paymentStatus: "PAID",
+  paymentId: razorpay_payment_id,
+  orderId: razorpay_order_id,
+  paymentMethod: "Google Pay"
+}).save();
 
     res.json({ success: true });
   } catch (err) {
@@ -187,6 +189,29 @@ app.post("/submit-feedback", async (req, res) => {
     res.status(201).json({ message: "Feedback submitted successfully!" });
   } catch {
     res.status(500).json({ message: "Failed to save feedback" });
+  }
+});
+
+/* ================== USER PAID ORDERS ================== */
+
+app.get("/user/paid-orders", async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email required" });
+    }
+
+    const orders = await PaidUser.find({
+      email: email,
+      paymentStatus: "PAID"
+    }).sort({ createdAt: -1 });
+
+    res.json(orders);
+
+  } catch (err) {
+    console.error("❌ Fetch Paid Orders Error:", err);
+    res.status(500).json({ message: "Failed to fetch orders" });
   }
 });
 
