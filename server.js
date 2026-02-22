@@ -77,6 +77,35 @@ app.get("/", (_, res) => {
   res.send("🏡 Skyline Properties Backend is running 🚀");
 });
 
+/* ================== USER PROFILE ================== */
+
+app.get("/user/profile", async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email required" });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      address: user.address
+    });
+
+  } catch (err) {
+    console.error("❌ Fetch Profile Error:", err);
+    res.status(500).json({ message: "Failed to fetch profile" });
+  }
+});
+
 /* ================== RAZORPAY PAYMENT ================== */
 
 // Create Order (₹1)
