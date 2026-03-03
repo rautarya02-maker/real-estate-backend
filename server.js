@@ -144,16 +144,24 @@ app.post("/verify-payment", async (req, res) => {
     if (expectedSignature !== razorpay_signature) {
       return res.status(400).json({ success: false });
     }
-
+if (!email) {
+  return res.status(400).json({ success: false, message: "Email required" });
+}
     // ✅ SAVE TO SEPARATE COLLECTION
-await new PaidUser({
-  email,                    // ✅ ADD THIS
-  amount: 1,
-  paymentStatus: "PAID",
-  paymentId: razorpay_payment_id,
-  orderId: razorpay_order_id,
-  paymentMethod: "Google Pay"
-}).save();
+const existingPayment = await PaidUser.findOne({
+  paymentId: razorpay_payment_id
+});
+
+if (!existingPayment) {
+  await new PaidUser({
+    email,
+    amount: 1,
+    paymentStatus: "PAID",
+    paymentId: razorpay_payment_id,
+    orderId: razorpay_order_id,
+    paymentMethod: "Google Pay"
+  }).save();
+}
 
     res.json({ success: true });
   } catch (err) {
