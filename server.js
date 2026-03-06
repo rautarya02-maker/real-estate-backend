@@ -10,8 +10,8 @@ import crypto from "crypto";
 import User from "./models/User.js";
 import Feedback from "./models/Feedback.js";
 import Contact from "./models/Contact.js";
-import Visit from "./models/Visit.js";        // optional, unchanged
-import PaidUser from "./models/PaidUser.js";  // ✅ separate collection
+import Visit from "./models/Visit.js";
+import PaidUser from "./models/PaidUser.js";
 
 dotenv.config();
 
@@ -29,25 +29,34 @@ const razorpay = new Razorpay({
 
 app.use(express.json());
 
+/* ================== CORS ================== */
+
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "https://skyline-properties.netlify.app",
   "https://skyline-properties-maharashtra.netlify.app",
-  "https://skyline-properties.pages.dev/"
+  "https://skyline-properties.pages.dev"
 ];
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
       console.warn("❌ Blocked by CORS:", origin);
-      return callback(null, false);
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
+    methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+    allowedHeaders: ["Content-Type","Authorization"]
   })
 );
 
@@ -60,15 +69,21 @@ mongoose.set("bufferCommands", false);
 
 async function connectDB() {
   try {
+
     console.log("🔍 Connecting to MongoDB...");
+
     await mongoose.connect(process.env.MONGO_URI, {
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000
     });
+
     console.log("✅ MongoDB Connected");
+
   } catch (err) {
+
     console.error("❌ MongoDB Error:", err.message);
     process.exit(1);
+
   }
 }
 
@@ -82,6 +97,7 @@ app.get("/", (_, res) => {
 
 app.get("/user/profile", async (req, res) => {
   try {
+
     const { email } = req.query;
 
     if (!email) {
@@ -102,16 +118,21 @@ app.get("/user/profile", async (req, res) => {
     });
 
   } catch (err) {
+
     console.error("❌ Fetch Profile Error:", err);
     res.status(500).json({ message: "Failed to fetch profile" });
+
   }
 });
 
 /* ================== RAZORPAY PAYMENT ================== */
 
-// Create Order (₹1)
+/* Create Order */
+
 app.post("/create-order", async (req, res) => {
+
   try {
+
     const order = await razorpay.orders.create({
       amount: 1 * 100,
       currency: "INR",
@@ -119,20 +140,27 @@ app.post("/create-order", async (req, res) => {
     });
 
     res.json({ success: true, order });
+
   } catch (err) {
+
     console.error("❌ Razorpay Order Error:", err);
     res.status(500).json({ success: false });
+
   }
+
 });
 
-// Verify Payment & Save Paid User
+/* Verify Payment */
+
 app.post("/verify-payment", async (req, res) => {
+
   try {
+
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      email   // ✅ ADD THIS
+      email
     } = req.body;
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
@@ -145,129 +173,189 @@ app.post("/verify-payment", async (req, res) => {
     if (expectedSignature !== razorpay_signature) {
       return res.status(400).json({ success: false });
     }
-if (!email) {
-  return res.status(400).json({ success: false, message: "Email required" });
-}
-    // ✅ SAVE TO SEPARATE COLLECTION
-const existingPayment = await PaidUser.findOne({
-  paymentId: razorpay_payment_id
-});
 
-if (!existingPayment) {
-  await new PaidUser({
-    email,
-    amount: 1,
-    paymentStatus: "PAID",
-    paymentId: razorpay_payment_id,
-    orderId: razorpay_order_id,
-    paymentMethod: "Google Pay"
-  }).save();
-}
+    if (!email) {
+      return res.status(400).json({
+        success:false,
+        message:"Email required"
+      });
+    }
+
+    const existingPayment = await PaidUser.findOne({
+      paymentId: razorpay_payment_id
+    });
+
+    if (!existingPayment) {
+
+      await new PaidUser({
+        email,
+        amount: 1,
+        paymentStatus: "PAID",
+        paymentId: razorpay_payment_id,
+        orderId: razorpay_order_id,
+        paymentMethod: "Google Pay"
+      }).save();
+
+    }
 
     res.json({ success: true });
+
   } catch (err) {
+
     console.error("❌ PaidUser Save Error:", err);
     res.status(500).json({ success: false });
+
   }
+
 });
 
 /* ================== CHATBOT ================== */
 
 app.get("/chat", (_, res) => {
-  res.json({ status: "ok", message: "Chat endpoint live" });
+  res.json({
+    status:"ok",
+    message:"Chat endpoint live"
+  });
 });
 
 app.post("/chat", async (req, res) => {
+
   const { message } = req.body;
 
   if (!message?.trim()) {
-    return res.status(400).json({ reply: "Please type a message 😊" });
+    return res.status(400).json({
+      reply:"Please type a message 😊"
+    });
   }
 
   try {
+
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "deepseek/deepseek-chat",
-        messages: [
+        model:"deepseek/deepseek-chat",
+        messages:[
           {
-            role: "system",
-            content:
-              "You are a helpful and professional AI real estate assistant for Skyline Properties."
+            role:"system",
+            content:"You are a helpful and professional AI real estate assistant for Skyline Properties."
           },
-          { role: "user", content: message }
+          {
+            role:"user",
+            content:message
+          }
         ]
       },
       {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://skyline-properties.netlify.app",
-          "X-Title": "Skyline Estates AI Concierge"
+        headers:{
+          Authorization:`Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type":"application/json",
+          "HTTP-Referer":"https://skyline-properties.pages.dev",
+          "X-Title":"Skyline Estates AI Concierge"
         },
-        timeout: 20000
+        timeout:20000
       }
     );
 
     res.json({
-      success: true,
-      reply: response.data.choices[0].message.content
+      success:true,
+      reply:response.data.choices[0].message.content
     });
+
   } catch (err) {
+
     console.error("❌ AI Chat Error:", err.message);
-    res.status(500).json({ reply: "AI service unavailable" });
+
+    res.status(500).json({
+      reply:"AI service unavailable"
+    });
+
   }
+
 });
 
 /* ================== FEEDBACK ================== */
 
-app.post("/submit-feedback", async (req, res) => {
+app.post("/submit-feedback", async (req,res) => {
+
   try {
+
     await new Feedback(req.body).save();
-    res.status(201).json({ message: "Feedback submitted successfully!" });
+
+    res.status(201).json({
+      message:"Feedback submitted successfully!"
+    });
+
   } catch {
-    res.status(500).json({ message: "Failed to save feedback" });
+
+    res.status(500).json({
+      message:"Failed to save feedback"
+    });
+
   }
+
 });
 
 /* ================== USER PAID ORDERS ================== */
 
-app.get("/user/paid-orders", async (req, res) => {
+app.get("/user/paid-orders", async (req,res) => {
+
   try {
+
     const { email } = req.query;
 
     if (!email) {
-      return res.status(400).json({ message: "Email required" });
+      return res.status(400).json({
+        message:"Email required"
+      });
     }
 
     const orders = await PaidUser.find({
-      email: email,
-      paymentStatus: "PAID"
-    }).sort({ createdAt: -1 });
+      email:email,
+      paymentStatus:"PAID"
+    }).sort({ createdAt:-1 });
 
     res.json(orders);
 
   } catch (err) {
+
     console.error("❌ Fetch Paid Orders Error:", err);
-    res.status(500).json({ message: "Failed to fetch orders" });
+
+    res.status(500).json({
+      message:"Failed to fetch orders"
+    });
+
   }
+
 });
 
 /* ================== CONTACT ================== */
 
-app.post("/contact-us", async (req, res) => {
+app.post("/contact-us", async (req,res) => {
+
   try {
+
     await new Contact(req.body).save();
-    res.status(201).json({ message: "Message sent successfully!" });
+
+    res.status(201).json({
+      message:"Message sent successfully!"
+    });
+
   } catch {
-    res.status(500).json({ message: "Failed to send message" });
+
+    res.status(500).json({
+      message:"Failed to send message"
+    });
+
   }
+
 });
 
-/* ================== VISIT BOOKING (OPTIONAL, UNCHANGED) ================== */
+/* ================== VISIT BOOKING ================== */
 
-app.post("/submit-visit", async (req, res) => {
+app.post("/submit-visit", async (req,res) => {
+
   try {
+
     const {
       name,
       email,
@@ -283,85 +371,131 @@ app.post("/submit-visit", async (req, res) => {
     const finalDate = date || visitDate;
 
     if (!name || !email || !phone || !finalDate || !timeSlot) {
-      return res.status(400).json({ success: false });
+      return res.status(400).json({ success:false });
     }
 
     const visit = await new Visit({
       name,
       email,
       phone,
-      date: finalDate,
+      date:finalDate,
       timeSlot,
       contactMethods,
       message,
       propertyId,
-      paymentStatus: "PENDING"
+      paymentStatus:"PENDING"
     }).save();
 
-    res.status(201).json({ success: true, visitId: visit._id });
+    res.status(201).json({
+      success:true,
+      visitId:visit._id
+    });
+
   } catch {
-    res.status(500).json({ success: false });
+
+    res.status(500).json({
+      success:false
+    });
+
   }
+
 });
 
 /* ================== AUTH ================== */
 
-app.post("/signup", async (req, res) => {
+app.post("/signup", async (req,res) => {
+
   try {
-    const { name, email, password, phone, address } = req.body;
+
+    const { name,email,password,phone,address } = req.body;
 
     if (await User.findOne({ email })) {
-      return res.status(400).json({ message: "Email already registered" });
+      return res.status(400).json({
+        message:"Email already registered"
+      });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password,10);
 
     await User.create({
       name,
       email,
-      password: hashedPassword,
+      password:hashedPassword,
       phone,
       address
     });
 
-    res.json({ message: "Account created successfully!" });
+    res.json({
+      message:"Account created successfully!"
+    });
+
   } catch {
-    res.status(500).json({ message: "Signup failed" });
+
+    res.status(500).json({
+      message:"Signup failed"
+    });
+
   }
+
 });
 
-app.post("/login", async (req, res) => {
+app.post("/login", async (req,res) => {
+
   try {
-    const { email, password } = req.body;
+
+    const { email,password } = req.body;
+
     const user = await User.findOne({ email });
 
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(400).json({ message: "Invalid email or password" });
+    if (!user || !(await bcrypt.compare(password,user.password))) {
+      return res.status(400).json({
+        message:"Invalid email or password"
+      });
     }
 
-    res.json({ message: "Login successful", name: user.name });
+    res.json({
+      message:"Login successful",
+      name:user.name
+    });
+
   } catch {
-    res.status(500).json({ message: "Login failed" });
+
+    res.status(500).json({
+      message:"Login failed"
+    });
+
   }
+
 });
 
 /* ================== ADMIN ================== */
 
-app.get("/admin/users", async (_, res) => res.json(await User.find()));
-app.get("/admin/paid-users", async (_, res) => res.json(await PaidUser.find()));
-app.get("/admin/bookings", async (_, res) => res.json(await Visit.find()));
-app.get("/admin/feedbacks", async (_, res) => res.json(await Feedback.find()));
-app.get("/admin/contacts", async (_, res) => res.json(await Contact.find()));
+app.get("/admin/users", async (_,res)=>res.json(await User.find()));
 
-app.delete("/admin/users/:id", async (req, res) => {
+app.get("/admin/paid-users", async (_,res)=>res.json(await PaidUser.find()));
+
+app.get("/admin/bookings", async (_,res)=>res.json(await Visit.find()));
+
+app.get("/admin/feedbacks", async (_,res)=>res.json(await Feedback.find()));
+
+app.get("/admin/contacts", async (_,res)=>res.json(await Contact.find()));
+
+app.delete("/admin/users/:id", async (req,res)=>{
+
   await User.findByIdAndDelete(req.params.id);
-  res.json({ message: "Deleted" });
+
+  res.json({ message:"Deleted" });
+
 });
 
 /* ================== START ================== */
 
-connectDB().then(() => {
-  app.listen(PORT, () => {
+connectDB().then(()=>{
+
+  app.listen(PORT, ()=>{
+
     console.log(`🚀 Server running on port ${PORT}`);
+
   });
+
 });
