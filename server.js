@@ -34,6 +34,7 @@ const allowedOrigins = [
   "http://localhost:3000",
   "https://skyline-properties.netlify.app",
   "https://skyline-properties-maharashtra.netlify.app"
+  "https://skyline-properties.pages.dev/"
 ];
 
 app.use(
